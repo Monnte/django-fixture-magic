@@ -1,4 +1,15 @@
+import os
+import shutil
+import tempfile
+
+from django.conf import settings
 from django.db import models
+
+try:
+    from django.apps import apps
+except ImportError:
+    # fallback for old django
+    from django.db.models import loading as apps
 
 serialize_me = []
 seen = {}
@@ -70,7 +81,7 @@ def serialize_fully(exclude_fields):
                 try:
                     add_to_serialize_list(
                         [serialize_me[index].__getattribute__(field.name)])
-                except (models.ObjectDoesNotExist, models.DoesNotExist):
+                except Exception:
                     pass
         for field in get_m2m(serialize_me[index], exclude_fields):
             add_to_serialize_list(
@@ -97,3 +108,53 @@ def add_to_serialize_list(objs):
         if key not in seen:
             serialize_me.append(obj)
             seen[key] = 1
+
+
+def extract_files_from_fixture(fixture_data, exclude_fields=None):
+    """
+    Extracts all files from a fixture, copies them to a temporary directory,
+    and returns the path to that directory.
+    """
+    if exclude_fields is None:
+        exclude_fields = {}
+
+    tmp_dir = tempfile.mkdtemp()
+    model_file_fields = {}
+
+    for obj in fixture_data:
+        try:
+            model_class = apps.get_model(obj['model'])
+            model_label = model_class._meta.label.lower()
+        except (LookupError, AttributeError):
+            continue
+
+        if model_label not in model_file_fields:
+            file_fields = []
+            for field in model_class._meta.fields:
+                if isinstance(field, models.FileField):
+                    to_exclude = exclude_fields.get(model_label, [])
+                    if field.name not in to_exclude:
+                        file_fields.append(field.name)
+            model_file_fields[model_label] = file_fields
+
+        if not model_file_fields.get(model_label):
+            continue
+
+        for field_name in model_file_fields[model_label]:
+            file_path = obj.get('fields', {}).get(field_name)
+
+            if file_path:
+                media_root = getattr(settings, 'MEDIA_ROOT', '')
+                source_path = os.path.join(media_root, file_path)
+
+                if os.path.exists(source_path) and os.path.isfile(source_path):
+                    try:
+                        destination_path = os.path.join(tmp_dir, file_path)
+                        destination_dir = os.path.dirname(destination_path)
+                        if not os.path.exists(destination_dir):
+                            os.makedirs(destination_dir)
+
+                        shutil.copy(source_path, destination_path)
+                    except (IOError, os.error):
+                        pass
+    return tmp_dir

@@ -1,3 +1,7 @@
+import sys
+
+import ijson
+
 try:
     import json
 except ImportError:
@@ -11,16 +15,18 @@ def write_json(output):
         # check our json import supports sorting keys
         json.dumps([1], sort_keys=True)
     except TypeError:
-        print(json.dumps(output, indent=4))
+        print(json.dumps(output, indent=0), file=sys.stdout)
     else:
-        print(json.dumps(output, sort_keys=True, indent=4))
+        print(json.dumps(output, sort_keys=True, indent=0), file=sys.stdout)
 
 
 class Command(BaseCommand):
-    help = 'Merge a series of fixtures and remove duplicates.'
+    help = "Merge a series of fixtures and remove duplicates."
 
     def add_arguments(self, parser):
-        parser.add_argument('args', metavar='files', nargs='+', help='One or more fixture.')
+        parser.add_argument(
+            "args", metavar="files", nargs="+", help="One or more fixture."
+        )
 
     def handle(self, *files, **options):
         """
@@ -31,12 +37,11 @@ class Command(BaseCommand):
         seen = {}
 
         for f in files:
-            f = open(f)
-            data = json.loads(f.read())
-            for obj in data:
-                key = '%s|%s' % (obj['model'], obj['pk'])
-                if key not in seen:
-                    seen[key] = 1
-                    output.append(obj)
+            with open(f, "r") as f_handle:
+                for obj in ijson.items(f_handle, "item"):
+                    key = "%s|%s" % (obj["model"], obj["pk"])
+                    if key not in seen:
+                        seen[key] = 1
+                        output.append(obj)
 
         write_json(output)
