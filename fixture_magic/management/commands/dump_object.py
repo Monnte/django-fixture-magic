@@ -8,10 +8,15 @@ try:
     from django.db.models import loading
 except ImportError:
     from django.apps import apps as loading
+
 import json
 
-from fixture_magic.utils import (add_to_serialize_list, serialize_me, seen,
-                                 serialize_fully)
+from fixture_magic.utils import (
+    add_to_serialize_list,
+    seen,
+    serialize_fully,
+    serialize_me,
+)
 
 
 class Command(BaseCommand):
@@ -36,9 +41,9 @@ class Command(BaseCommand):
                             default=False,
                             help='Attempts to get related objects as well.')
         parser.add_argument('--exclude-fields', '-e',
-                            default=[],
-                            nargs='*',
-                            help='List of excluded fields (works for all models)')
+                            default='{}',
+                            help='JSON object of excluded fields per model: '
+                                 '\'{"app_label.model_name": ["field1", ...]}\'')
         parser.add_argument('--natural', '-n',
                             action='store_true', dest='natural',
                             default=False,
@@ -91,6 +96,11 @@ class Command(BaseCommand):
         except AssertionError:
             raise CommandError(error_text % 'No filter argument supplied.')
 
+        try:
+            exclude_fields = json.loads(options['exclude_fields'])
+        except ValueError:
+            raise CommandError("Invalid JSON format for --exclude-fields.")
+
         dump_me = loading.get_model(app_label, model_name)
         if query:
             objs = dump_me.objects.filter(**json.loads(query))
@@ -113,7 +123,7 @@ class Command(BaseCommand):
                     objs = []
 
         if options.get('kitchensink'):
-            fields = get_all_related_objects(dump_me, options['exclude_fields'])
+            fields = get_all_related_objects(dump_me, exclude_fields)
 
             related_fields = [rel.get_accessor_name() for rel in fields]
 
@@ -132,7 +142,7 @@ class Command(BaseCommand):
         add_to_serialize_list(objs)
 
         if options.get('follow_fk', True):
-            serialize_fully(options['exclude_fields'])
+            serialize_fully(exclude_fields)
         else:
             # reverse list to match output of serializez_fully
             serialize_me.reverse()

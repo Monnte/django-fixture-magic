@@ -38,30 +38,41 @@ def reorder_json(data, models, ordering_cond=None):
     return output
 
 
-def get_fields(obj, *exclude_fields):
+def get_fields(obj, exclude_fields=None):
+    if exclude_fields is None:
+        exclude_fields = {}
     try:
-        return [f for f in obj._meta.fields if f.name not in exclude_fields]
+        key = obj._meta.label.lower()
+        to_exclude = exclude_fields.get(key, [])
+        return [f for f in obj._meta.fields if f.name not in to_exclude]
     except AttributeError:
         return []
 
 
-def get_m2m(obj, *exclude_fields):
+def get_m2m(obj, exclude_fields=None):
+    if exclude_fields is None:
+        exclude_fields = {}
     try:
-        return [f for f in obj._meta.many_to_many if f.name not in exclude_fields]
+        key = obj._meta.label.lower()
+        to_exclude = exclude_fields.get(key, [])
+        return [f for f in obj._meta.many_to_many if f.name not in to_exclude]
     except AttributeError:
         return []
 
 
 def serialize_fully(exclude_fields):
     index = 0
-    exclude_fields = exclude_fields or ()
+    exclude_fields = exclude_fields or {}
 
     while index < len(serialize_me):
-        for field in get_fields(serialize_me[index], *exclude_fields):
+        for field in get_fields(serialize_me[index], exclude_fields):
             if isinstance(field, models.ForeignKey):
-                add_to_serialize_list(
-                    [serialize_me[index].__getattribute__(field.name)])
-        for field in get_m2m(serialize_me[index], *exclude_fields):
+                try:
+                    add_to_serialize_list(
+                        [serialize_me[index].__getattribute__(field.name)])
+                except (models.ObjectDoesNotExist, models.DoesNotExist):
+                    pass
+        for field in get_m2m(serialize_me[index], exclude_fields):
             add_to_serialize_list(
                 serialize_me[index].__getattribute__(field.name).all())
 
