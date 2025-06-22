@@ -6,19 +6,22 @@ except ImportError:
     from django.utils import simplejson as json
 
 from django.core.management.base import BaseCommand
+
 try:
     from django.db.models import loading
 except ImportError:
     from django.apps import apps as loading
-from django.core.serializers import serialize
+
 from django.conf import settings
+from django.core.serializers import serialize
+from django.core.serializers.json import DjangoJSONEncoder
 from django.template import Variable, VariableDoesNotExist
 
 from fixture_magic.utils import (
     add_to_serialize_list,
     reorder_json,
+    serialize_fully,
     serialize_me,
-    serialize_fully
 )
 
 
@@ -67,4 +70,4 @@ class Command(BaseCommand):
             ordering_cond=dump_settings.get('order_cond', {})
         )
 
-        print(json.dumps(data, indent=4))
+        print(json.dumps(data, indent=0, cls=DjangoJSONEncoder))

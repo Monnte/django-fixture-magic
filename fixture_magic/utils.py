@@ -1,7 +1,9 @@
 import os
 import shutil
 import tempfile
+from collections import defaultdict
 
+from django.apps import apps
 from django.conf import settings
 from django.db import models
 
@@ -36,8 +38,8 @@ def reorder_json(data, models, ordering_cond=None):
         bucket[model] = []
 
     for object in data:
-        if object['model'] in bucket.keys():
-            bucket[object['model']].append(object)
+        if object["model"] in bucket.keys():
+            bucket[object["model"]].append(object)
         else:
             others.append(object)
     for model in models:
@@ -80,12 +82,14 @@ def serialize_fully(exclude_fields):
             if isinstance(field, models.ForeignKey):
                 try:
                     add_to_serialize_list(
-                        [serialize_me[index].__getattribute__(field.name)])
+                        [serialize_me[index].__getattribute__(field.name)]
+                    )
                 except Exception:
                     pass
         for field in get_m2m(serialize_me[index], exclude_fields):
             add_to_serialize_list(
-                serialize_me[index].__getattribute__(field.name).all())
+                serialize_me[index].__getattribute__(field.name).all()
+            )
 
         index += 1
 
@@ -96,13 +100,12 @@ def add_to_serialize_list(objs):
     for obj in objs:
         if obj is None:
             continue
-        if not hasattr(obj, '_meta'):
+        if not hasattr(obj, "_meta"):
             add_to_serialize_list(obj)
             continue
 
         meta = obj._meta.proxy_for_model._meta if obj._meta.proxy else obj._meta
-        model_name = getattr(meta, 'model_name',
-                             getattr(meta, 'module_name', None))
+        model_name = getattr(meta, "model_name", getattr(meta, "module_name", None))
         key = "%s:%s:%s" % (obj._meta.app_label, model_name, obj.pk)
 
         if key not in seen:
@@ -123,7 +126,7 @@ def extract_files_from_fixture(fixture_data, exclude_fields=None):
 
     for obj in fixture_data:
         try:
-            model_class = apps.get_model(obj['model'])
+            model_class = apps.get_model(obj["model"])
             model_label = model_class._meta.label.lower()
         except (LookupError, AttributeError):
             continue
@@ -141,10 +144,10 @@ def extract_files_from_fixture(fixture_data, exclude_fields=None):
             continue
 
         for field_name in model_file_fields[model_label]:
-            file_path = obj.get('fields', {}).get(field_name)
+            file_path = obj.get("fields", {}).get(field_name)
 
             if file_path:
-                media_root = getattr(settings, 'MEDIA_ROOT', '')
+                media_root = getattr(settings, "MEDIA_ROOT", "")
                 source_path = os.path.join(media_root, file_path)
 
                 if os.path.exists(source_path) and os.path.isfile(source_path):
@@ -158,3 +161,20 @@ def extract_files_from_fixture(fixture_data, exclude_fields=None):
                     except (IOError, os.error):
                         pass
     return tmp_dir
+
+
+def get_proxy_children_map():
+    proxy_children = defaultdict(list)
+
+    for model in apps.get_models():
+        opts = model._meta
+        label = opts.label.lower()
+
+        if opts.proxy:
+            original = opts.proxy_for_model
+            original_label = original._meta.label.lower()
+            proxy_children[original_label].append(label)
+        else:
+            proxy_children[label] = proxy_children[label]
+
+    return dict(proxy_children)

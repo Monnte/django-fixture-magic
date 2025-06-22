@@ -6,6 +6,7 @@ except ImportError:
 import sys
 
 from django.core.management.base import BaseCommand
+from django.core.serializers.json import DjangoJSONEncoder
 
 from fixture_magic.utils import reorder_json
 
@@ -20,4 +21,4 @@ class Command(BaseCommand):
     def handle(self, fixture, *models, **options):
         output = reorder_json(json.loads(open(fixture).read()), models)
 
-        print(json.dumps(output, indent=2), file=sys.stdout)
+        print(json.dumps(output, indent=0, cls=DjangoJSONEncoder), file=sys.stdout)
